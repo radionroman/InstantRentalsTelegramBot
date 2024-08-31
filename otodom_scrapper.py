@@ -35,14 +35,17 @@ def scrape_otodom(filters):
     soup = BeautifulSoup(response.content, 'html.parser')
 
 
-
     listings = []
 
     # Find all listings
     sections = soup.find_all('section', class_='eeungyz1 css-hqx1d9 e12fn6ie0')
     
-
+    index = 0
     for section in sections:
+        index += 1
+        if index <= 3:
+            continue
+        
         # Extract the title
         title_tag = section.find('a', class_='css-16vl3c1 e17g0c820')
         title = title_tag.text.strip() if title_tag else None

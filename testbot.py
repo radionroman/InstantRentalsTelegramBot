@@ -86,6 +86,7 @@ def get_offers(update: Update, context: CallbackContext) -> None:
     if not offers:
         update.message.reply_text("No offers found within your price range.")
     else:
+        update.message.reply_text(f"Found {len(offers)} offers within your price range.")
         i = 10
         for offer in offers:
             update.message.reply_text(
@@ -111,10 +112,13 @@ def start(update: Update, context: CallbackContext) -> None:
     context.bot.send_message(
         update.message.chat_id,
         "Hello! I'm a bot that will notify you of new rental offers in your location. \n"
-        "Use /set_price to set the price range of offers you are interested in, and /get_price to check current price range.\n"
-        "Use /list to see the available offer sources.\n"
-        "Use /set_location to set your location (For now only Warsaw).\n"
+        "Use /start_check to start checking for new offers every 10 minutes.\n"
+        "Use /stop_check to stop checking for new offers.\n"
         "Use /get_offers to get the latest offers within your price range.\n"
+        "Use /set_price to set the price range of offers you are interested in.\n"
+        "Use /set_area to set the area range of offers you are interested in.\n"
+        "Use /get_filters to see the current filters.\n"
+        "Use /list to see the available offer sources.\n"
     )
 
 def echo(update: Update, context: CallbackContext) -> None:
@@ -124,7 +128,7 @@ def echo(update: Update, context: CallbackContext) -> None:
 
     # Print to console
     print(f'{update.message.from_user.first_name} wrote {update.message.text}')
-    update.message.copy(update.message.chat_id)
+    update.message.reply_text("I'm sorry, I'm not sure what you mean. Please use the /start command to see the available options.")
 
 
 def site_list(update: Update, context: CallbackContext) -> None:
@@ -362,11 +366,108 @@ def get_filters(update: Update, context: CallbackContext) -> None:
         
     )
 
+def check_new_offers(context: CallbackContext):
+    """This function is run periodically to check for new offers."""
+    job = context.job
+    user_id = job.context['user_id']
+
+    minimum_price = user_data[user_id]['minimum_price']
+    maximum_price = user_data[user_id]['maximum_price']
+    owner_type = user_data[user_id]['owner_type']
+    view_type = user_data[user_id]['view_type']
+    limit = user_data[user_id]['limit']
+    area_min = user_data[user_id]['area_min']
+    area_max = user_data[user_id]['area_max']
+    rooms_number = user_data[user_id]['rooms_number']
+    by = user_data[user_id]['by']
+    direction = user_data[user_id]['direction']
+    days = user_data[user_id]['days']
+
+    print(f'Checking for new offers for user {user_id}...')
+    print(user_data[user_id]['last_seen_offer'])
+    offers = scrape_otodom({
+        'min_price': minimum_price,
+        'max_price': maximum_price,
+        'owner_type': owner_type,
+        'view_type': view_type,
+        'limit': limit,
+        'area_min': area_min,
+        'area_max': area_max,
+        'rooms_number': rooms_number,
+        'by': by,
+        'direction': direction,
+        'days': days
+    })
+
+    if offers:
+        new_offers = []
+        last_seen_offer = user_data[user_id]['last_seen_offer']
+
+        for offer in offers:
+            # Compare with last seen offer; we assume 'link' can uniquely identify an offer
+            if last_seen_offer is None or offer['link'] != last_seen_offer:
+                new_offers.append(offer)
+            else:
+                break  # Stop as we've reached offers we've seen before
+
+        if new_offers:
+            for offer in new_offers:
+                context.bot.send_message(
+                    user_id,
+                    f"New offer found!\n"
+                    f"{offer['title']}\n"
+                    f"Price: {offer['price']}\n"
+                    f"Location: {offer['location']}\n"
+                    f"Room count: {offer['room_count']}\n"
+                    f"Area: {offer['area']}\n"
+                    f"Floor: {offer['floor']}\n"
+                    f"Link: {offer['link']}\n"
+                )
+            # Update the last seen offer
+            user_data[user_id]['last_seen_offer'] = new_offers[0]['link']
+
+def start_periodic_check(update: Update, context: CallbackContext) -> None:
+    """Starts the periodic job for checking new offers."""
+    user_id = update.message.from_user.id
+    #check if the user already started the periodic check
+    current_jobs = context.job_queue.get_jobs_by_name(str(user_id))
+    if current_jobs:
+        context.bot.send_message(user_id, "I'm already checking for new offers.")
+        return
+    context.bot.send_message(user_id, "I'll start checking for new offers every 10 minutes.")
+
+    print("Starting periodic check for user", update.message.from_user.first_name)
+    # Start a job that checks for new offers every 10 minutes
+    job_queue = context.job_queue
+    # Function to execute immediately
+    def run_now(context: CallbackContext):
+        check_new_offers(context)
+
+    # Start a job that checks for new offers immediately
+    job_queue = context.job_queue
+    job_queue.run_once(run_now, when=0, context={'user_id': user_id})
+    # Run the job every 10 minutes (including right now)
+    job_queue.run_repeating(check_new_offers, interval=600, first=0, context={'user_id': user_id}, name=str(user_id))
+
+def stop_periodic_check(update: Update, context: CallbackContext) -> None:
+    """Stops the periodic job for checking new offers."""
+    user_id = update.message.from_user.id
+    context.bot.send_message(user_id, "I've stopped checking for new offers.")
+
+    # Remove the job associated with this user_id
+    current_jobs = context.job_queue.get_jobs_by_name(str(user_id))
+
+    for job in current_jobs:
+        print(f'Removing job {job}')
+        job.schedule_removal()
+
 def main() -> None:
     load_dotenv()
     token = os.getenv('TELEGRAM_BOT_TOKEN')
     updater = Updater(token)
     print(f'Bot started with token {token}')
+    job_queue = updater.job_queue
+
     # Get the dispatcher to register handlers
     # Then, we register each handler and the conditions the update must meet to trigger it
     dispatcher = updater.dispatcher
@@ -416,6 +517,9 @@ def main() -> None:
     # Echo any message that is not a command
     dispatcher.add_handler(MessageHandler(~Filters.command, echo))
 
+    dispatcher.add_handler(CommandHandler("start_check", start_periodic_check))
+    dispatcher.add_handler(CommandHandler("stop_check", stop_periodic_check))
+    
     # Start the Bot
     updater.start_polling()
 
