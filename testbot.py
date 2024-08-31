@@ -7,11 +7,12 @@ from olx_scrapper import scrape_olx
 
 from dotenv import load_dotenv
 from collections import defaultdict
-from telegram import Update, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
+from telegram import Update, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler, ConversationHandler, JobQueue
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
 
 
 DEFAULT_USER_DATA = {
@@ -27,28 +28,11 @@ DEFAULT_USER_DATA = {
     'direction': 'DESC',
     'days': '1',
     'last_seen_offer_olx': None,
-    'last_seen_offer_otodom': None
+    'last_seen_offer_otodom': None,
+    'selected_rooms': [1,2,3,4,5,6]
 }
 
 user_data = defaultdict(lambda: DEFAULT_USER_DATA.copy())
-
-# Pre-assign menu text
-FIRST_MENU = "<b>Menu 1</b>\n\nA beautiful menu with a shiny inline button."
-SECOND_MENU = "<b>Menu 2</b>\n\nA better menu with even more shiny inline buttons."
-
-# Pre-assign button text
-NEXT_BUTTON = "Next"
-BACK_BUTTON = "Back"
-TUTORIAL_BUTTON = "Tutorial"
-
-# Build keyboards
-FIRST_MENU_MARKUP = InlineKeyboardMarkup([[
-    InlineKeyboardButton(NEXT_BUTTON, callback_data=NEXT_BUTTON)
-]])
-SECOND_MENU_MARKUP = InlineKeyboardMarkup([
-    [InlineKeyboardButton(BACK_BUTTON, callback_data=BACK_BUTTON)],
-    [InlineKeyboardButton(TUTORIAL_BUTTON, url="https://core.telegram.org/bots/api")]
-])
 
 offer_sources = [
     {
@@ -61,73 +45,43 @@ offer_sources = [
     }
 ]
 
-
-# def get_offers(update: Update, context: CallbackContext) -> None:
-#     """
-#     This function fetches the latest rental offers within the price range and sends them to the user.
-#     """
-
-#     user_id = update.message.from_user.id  
-#     minimum_price = user_data[user_id]['minimum_price']
-#     maximum_price = user_data[user_id]['maximum_price']
-#     owner_type = user_data[user_id]['owner_type']
-#     view_type = user_data[user_id]['view_type']
-#     limit = user_data[user_id]['limit']
-#     area_min = user_data[user_id]['area_min']
-#     area_max = user_data[user_id]['area_max']
-#     rooms_number = user_data[user_id]['rooms_number']
-#     by = user_data[user_id]['by']
-#     direction = user_data[user_id]['direction']
-#     days = user_data[user_id]['days']
+#define names for keyboard buttons
+BTN_OFFER_SOURCES = 'List Offer Sources 📋'
+BTN_FILTERS = 'Show Filters ⚙️'
+BTN_PRICE_RANGE = 'Set Price Range 🤑'
+BTN_AREA_RANGE = 'Set Area Range 🏰'
+BTN_START_MONITORING = 'Start Monitoring 🕵️'
+BTN_STOP_MONITORING = 'Stop Monitoring 🛑'
+BTN_ROOMS = 'Select Rooms 🛏️'
+BTN_CANCEL = 'Cancel 🚫'
 
 
-#     offers = scrape_otodom({'min_price': minimum_price, 'max_price': maximum_price, 'owner_type': owner_type, 'view_type': view_type, 'limit': limit, 'area_min': area_min, 'area_max': area_max, 'rooms_number': rooms_number, 'by': by, 'direction': direction, 'days': days})
+start_menu_keyboard = [
+    [BTN_OFFER_SOURCES, BTN_FILTERS],
+    [BTN_PRICE_RANGE, BTN_AREA_RANGE],
+    [BTN_ROOMS, BTN_START_MONITORING]
+]
 
-#     update.message.reply_text("Fetching the latest offers... with filters:\n min_price: " + str(minimum_price) + "\n max_price: " + str(maximum_price) + "\n owner_type: " + owner_type + "\n view_type: " + view_type + "\n limit: " + limit + "\n area_min: " + area_min + "\n area_max: " + area_max + "\n rooms_number: " + rooms_number + "\n by: " + by + "\n direction: " + direction + "\n days: " + days)
+cancel_keyboard = [[BTN_CANCEL]]
 
-#     if not offers:
-#         update.message.reply_text("No offers found within your price range.")
-#     else:
-#         update.message.reply_text(f"Found {len(offers)} offers within your price range.")
-#         i = 10
-#         for offer in offers:
-#             update.message.reply_text(
-#                 f"{offer['title']}\n"
-#                 f"Price: {offer['price']}\n"
-#                 f"Location: {offer['location']}\n"
-#                 f"Room count: {offer['room_count']}\n"
-#                 f"Area: {offer['area']}\n"
-#                 f"Floor: {offer['floor']}\n"
-#                 f"Link: {offer['link']}\n"
-#             )
-#             i -= 1
-#             if i == 0:
-#                 break
+stop_monitoring_keyboard = [[BTN_STOP_MONITORING]]
+
+def get_markup(user_id):
+    if user_data[user_id]['last_seen_offer_otodom']:
+        return stop_monitoring_markup
+    else:
+        return start_menu_markup
 
 
-# def start(update: Update, context: CallbackContext) -> None:
-#     """
-#     This function handles the /start command
-#     """
+start_menu_markup = ReplyKeyboardMarkup(start_menu_keyboard, one_time_keyboard=False, resize_keyboard=True)
+cancel_markup = ReplyKeyboardMarkup(cancel_keyboard, one_time_keyboard=True, resize_keyboard=True)
+stop_monitoring_markup = ReplyKeyboardMarkup(stop_monitoring_keyboard, one_time_keyboard=True, resize_keyboard=True)
 
-#     settings = user_data[update.message.from_user.id]
-#     context.bot.send_message(
-#         update.message.chat_id,
-#         "Hello! I'm a bot that will notify you of new rental offers in your location. \n"
-#         "Use /start_check to start checking for new offers every 10 minutes.\n"
-#         "Use /stop_check to stop checking for new offers.\n"
-#         "Use /get_offers to get the latest offers within your price range.\n"
-#         "Use /set_price to set the price range of offers you are interested in.\n"
-#         "Use /set_area to set the area range of offers you are interested in.\n"
-#         "Use /get_filters to see the current filters.\n"
-#         "Use /list to see the available offer sources.\n"
-#     )
 
 def echo(update: Update, context: CallbackContext) -> None:
     """
     This function would be added to the dispatcher as a handler for messages coming from the Bot API
     """
-
     # Print to console
     print(f'{update.message.from_user.first_name} wrote {update.message.text}')
     update.message.reply_text("I'm sorry, I'm not sure what you mean. Please use the /menu command to see the available options.")
@@ -152,112 +106,8 @@ def site_list(update: Update, context: CallbackContext) -> None:
         ParseMode.HTML
     )
 
-def set_price_range(update: Update, context: CallbackContext) -> None:
-    """
-    This function sets the minimum and maximum price for the offers
-    """
-
-    user_id = update.message.from_user.id
-
-    # Get the text from the message
-    text = update.message.text
-
-    # Split the text into a list of words
-    words = text.split()
-
-    # Check if the message has at least 3 words
-    if len(words) < 3:
-        context.bot.send_message(
-            update.message.chat_id,
-            "Please provide both the minimum and maximum price in pln: /set_price <minimum_price> <maximum_price>"
-        )
-        return
-
-    # Try to convert the words to integers
-    try:
-        minimum_price = int(words[1])
-        maximum_price = int(words[2])
-    except ValueError:
-        context.bot.send_message(
-            update.message.chat_id,
-            "Please provide valid numbers for the price range in pln: /set_price <minimum_price> <maximum_price>"
-        )
-        return
-
-    context.bot.send_message(
-        update.message.chat_id,
-        f"Price range set to {minimum_price} pln - {maximum_price} pln."
-        
-    )
-
-    user_data[user_id]['minimum_price'] = minimum_price
-    user_data[user_id]['maximum_price'] = maximum_price
-    print(f'User {update.message.from_user.id} set the price range to {minimum_price} pln - {maximum_price} pln.')
-
-def get_price_range(update: Update, context: CallbackContext) -> None:
-    """
-    This function shows the current price range
-    """
-    if update.message:
-        user_id = update.message.from_user.id
-        user_name = update.message.from_user.first_name
-    else:
-        user_id = update.callback_query.from_user.id
-        user_name = update.callback_query.from_user.first_name
-
-
-    minimum_price = user_data[user_id]['minimum_price']
-    maximum_price = user_data[user_id]['maximum_price']
-
-    print(f'User {user_name} requested the price range')
-
-    context.bot.send_message(
-        user_id,
-        f"Current price range: {minimum_price} pln - {maximum_price} pln."
-    )
-
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text("Welcome! Use /menu to see available options.")
-
-def menu(update: Update, context: CallbackContext) -> None:
-    keyboard = [
-        [
-            InlineKeyboardButton("List Offer Sources", callback_data='list'),
-            InlineKeyboardButton("Show Filters", callback_data='get_filters'),
-            
-        ],
-        [
-            InlineKeyboardButton("Set Price Range", callback_data='set_price'),
-            InlineKeyboardButton("Set Area Range", callback_data='set_area'),
-            
-        ],
-        [
-            InlineKeyboardButton("Start Monitoring", callback_data='start_check'),
-            InlineKeyboardButton("Stop Monitoring", callback_data='stop_check'),
-        ],
-       
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Please choose an option:', reply_markup=reply_markup)
-
-def button_tap(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    query.answer()
-
-    if query.data == 'list':
-        site_list(update, context)
-    elif query.data == 'set_price':
-        context.bot.send_message(query.message.chat_id, "Please use the /set_price command to set the price range.")
-    elif query.data == 'set_area':
-        context.bot.send_message(query.message.chat_id, "Please use the /set_area command to set the area range.")
-    elif query.data == 'get_filters':
-        get_filters(update, context)
-    elif query.data == 'start_check':
-        start_periodic_check(update, context)
-    elif query.data == 'stop_check':
-        stop_periodic_check(update, context)
-
+    update.message.reply_text( "Please choose an action", reply_markup=get_markup(update.message.from_user.id))
 
 
 MIN_PRICE, MAX_PRICE = range(2)
@@ -273,7 +123,7 @@ def set_price_start(update: Update, context: CallbackContext) -> int:
         user_id = update.callback_query.from_user.id
         user_name = update.callback_query.from_user.first_name
 
-    context.bot.send_message(user_id, "Please enter the minimum price in PLN.")
+    context.bot.send_message(user_id, "Please enter the minimum price in PLN.", reply_markup=cancel_markup)
     return MIN_PRICE
 
 def set_min_price(update: Update, context: CallbackContext) -> int:
@@ -315,7 +165,7 @@ def set_max_price(update: Update, context: CallbackContext) -> int:
         user_data[user_id]['minimum_price'] = minimum_price
         user_data[user_id]['maximum_price'] = maximum_price
 
-        context.bot.send_message(user_id, f"Price range set to {minimum_price} PLN - {maximum_price} PLN.")
+        context.bot.send_message(user_id, f"Price range set to {minimum_price} PLN - {maximum_price} PLN.", reply_markup=get_markup(user_id))
         return ConversationHandler.END
     except ValueError:
         update.message.reply_text("Please enter a valid number for the maximum price.")
@@ -332,7 +182,7 @@ def cancel(update: Update, context: CallbackContext) -> int:
         user_id = update.callback_query.from_user.id
         user_name = update.callback_query.from_user.first_name
 
-    context.bot.send_message(user_id, "Operation cancelled.")
+    context.bot.send_message(user_id, "Operation cancelled.", reply_markup=get_markup(user_id))
     return ConversationHandler.END
 
 
@@ -349,7 +199,7 @@ def set_area_start(update: Update, context: CallbackContext) -> int:
         user_id = update.callback_query.from_user.id
         user_name = update.callback_query.from_user.first_name
 
-    context.bot.send_message(user_id, "Please enter the minimum area in square meters.")
+    context.bot.send_message(user_id, "Please enter the minimum area in square meters.", reply_markup=cancel_markup)
     return MIN_AREA
 
 def set_min_area(update: Update, context: CallbackContext) -> int:
@@ -382,7 +232,7 @@ def set_max_area(update: Update, context: CallbackContext) -> int:
         user_data[user_id]['area_min'] = minimum_area
         user_data[user_id]['area_max'] = maximum_area
 
-        update.message.reply_text(f"Area range set to {minimum_area} m² - {maximum_area} m².")
+        update.message.reply_text(f"Area range set to {minimum_area} m² - {maximum_area} m².", reply_markup=get_markup(user_id))
         return ConversationHandler.END
     except ValueError:
         update.message.reply_text("Please enter a valid number for the maximum area.")
@@ -400,7 +250,7 @@ def cancel_area(update: Update, context: CallbackContext) -> int:
         user_name = update.callback_query.from_user.first_name
 
 
-    context.bot.send_message(user_id, "Operation cancelled.")
+    context.bot.send_message(user_id, "Operation cancelled.", reply_markup=get_markup(user_id))
     return ConversationHandler.END
 
 def get_filters(update: Update, context: CallbackContext) -> None:
@@ -419,6 +269,7 @@ def get_filters(update: Update, context: CallbackContext) -> None:
     maximum_price = user_data[user_id]['maximum_price']
     area_min = user_data[user_id]['area_min']
     area_max = user_data[user_id]['area_max']
+    selected_rooms = user_data[user_id].get('selected_rooms', [])
 
     print(f'User {user_name} requested the filters')
 
@@ -426,7 +277,8 @@ def get_filters(update: Update, context: CallbackContext) -> None:
         user_id,
         f"Current filters:\n"
         f"Price range: {minimum_price} PLN - {maximum_price} PLN\n"
-        f"Area range: {area_min} m² - {area_max} m²"
+        f"Area range: {area_min} m² - {area_max} m²\n"
+        f"Rooms: {', '.join(f'{room}' for room in sorted(selected_rooms))}",
         
     )
 
@@ -529,7 +381,7 @@ def start_periodic_check(update: Update, context: CallbackContext) -> None:
     if current_jobs:
         context.bot.send_message(user_id, "I'm already checking for new offers.")
         return
-    context.bot.send_message(user_id, "I'll start checking for new offers every 10 minutes.")
+    context.bot.send_message(user_id, "I'll start checking for new offers every 10 minutes.", reply_markup=stop_monitoring_markup)
 
     print("Starting periodic check for user", user_name)
     # Start a job that checks for new offers every 10 minutes
@@ -553,7 +405,7 @@ def stop_periodic_check(update: Update, context: CallbackContext) -> None:
         user_id = update.callback_query.from_user.id
         user_name = update.callback_query.from_user.first_name
 
-    context.bot.send_message(user_id, "I've stopped checking for new offers.")
+    context.bot.send_message(user_id, "I've stopped checking for new offers.", reply_markup=start_menu_markup)
 
     # Remove the job associated with this user_id
     current_jobs = context.job_queue.get_jobs_by_name(str(user_id))
@@ -561,11 +413,59 @@ def stop_periodic_check(update: Update, context: CallbackContext) -> None:
     # Remove last seen offers
     user_data[user_id]['last_seen_offer_olx'] = None
     user_data[user_id]['last_seen_offer_otodom'] = None
-    
+
 
     for job in current_jobs:
         print(f'Removing job {job}')
         job.schedule_removal()
+
+def room_selection_menu(update: Update, context: CallbackContext):
+    query = update.callback_query
+    chat_id = query.message.chat_id if query else update.message.chat_id
+    user_id = query.from_user.id if query else update.message.from_user.id
+
+    # Retrieve selected rooms or initialize
+    selected_rooms = user_data[user_id]['selected_rooms']
+
+    # Create the inline keyboard
+    keyboard = [
+        [InlineKeyboardButton(f"1 Room {'✅' if 1 in selected_rooms else '❌'}", callback_data='room_1')],
+        [InlineKeyboardButton(f"2 Rooms {'✅' if 2 in selected_rooms else '❌'}", callback_data='room_2')],
+        [InlineKeyboardButton(f"3 Rooms {'✅' if 3 in selected_rooms else '❌'}", callback_data='room_3')],
+        [InlineKeyboardButton(f"4+ Rooms {'✅' if 4 in selected_rooms else '❌'}", callback_data='room_4')],
+        [InlineKeyboardButton("Confirm", callback_data='confirm_rooms')],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if query:
+        query.edit_message_text("Select the number of rooms you want:", reply_markup=reply_markup)
+    else:
+        context.bot.send_message(chat_id, "Select the number of rooms you want:", reply_markup=reply_markup)
+
+def room_selection(update: Update, context: CallbackContext):
+    query = update.callback_query
+    room_number = int(query.data.split('_')[1])  # Extract the room number from callback data
+    user_id = query.from_user.id
+    selected_rooms = user_data[user_id]['selected_rooms']
+    print(f'User {user_id} selected {room_number} rooms.')
+    # Toggle selection
+    if room_number in selected_rooms:
+        selected_rooms.remove(room_number)
+    else:
+        selected_rooms.append(room_number)
+
+    user_data[user_id]['selected_rooms'] = selected_rooms
+    room_selection_menu(update, context)
+
+def confirm_room_selection(update: Update, context: CallbackContext):
+    user_id = update.callback_query.from_user.id
+    selected_rooms = user_data[user_id]['selected_rooms']
+    room_list = ', '.join(f'{room} room(s)' for room in sorted(selected_rooms))
+    context.bot.send_message(update.effective_chat.id, f"You have selected: {room_list}.")
+
+def start_room_selection(update: Update, context: CallbackContext):
+    room_selection_menu(update, context)
 
 def main() -> None:
     load_dotenv()
@@ -579,28 +479,30 @@ def main() -> None:
     dispatcher = updater.dispatcher
 
         # Register handler for inline buttons
-    dispatcher.add_handler(CallbackQueryHandler(button_tap))
 
     price_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('set_price', set_price_start)],
+        entry_points=[MessageHandler(Filters.regex(f'^{BTN_PRICE_RANGE}$'), set_price_start)],
         states={
-            MIN_PRICE: [MessageHandler(Filters.text & ~Filters.command, set_min_price)],
-            MAX_PRICE: [MessageHandler(Filters.text & ~Filters.command, set_max_price)],
+            MIN_PRICE: [MessageHandler(Filters.text & ~Filters.command & ~Filters.regex(f'^{BTN_CANCEL}$'), set_min_price)],
+            MAX_PRICE: [MessageHandler(Filters.text & ~Filters.command & ~Filters.regex(f'^{BTN_CANCEL}$'), set_max_price)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel), MessageHandler(Filters.regex(f'^{BTN_CANCEL}$'), cancel)]
     )
 
     area_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('set_area', set_area_start)],
+        entry_points=[MessageHandler(Filters.regex(f'^{BTN_AREA_RANGE}$'), set_area_start)],
         states={
-            MIN_AREA: [MessageHandler(Filters.text & ~Filters.command, set_min_area)],
-            MAX_AREA: [MessageHandler(Filters.text & ~Filters.command, set_max_area)],
+            MIN_AREA: [MessageHandler(Filters.text & ~Filters.command & ~Filters.regex(f'^{BTN_CANCEL}$'), set_min_area)],
+            MAX_AREA: [MessageHandler(Filters.text & ~Filters.command & ~Filters.regex(f'^{BTN_CANCEL}$'), set_max_area)],
         },
-        fallbacks=[CommandHandler('cancel', cancel_area)]
+        fallbacks=[CommandHandler('cancel', cancel_area), MessageHandler(Filters.regex(f'^{BTN_CANCEL}$'), cancel)]
     )
 
-    
 
+
+    dispatcher.add_handler(CommandHandler('rooms', room_selection_menu))
+    dispatcher.add_handler(CallbackQueryHandler(room_selection, pattern='^room_\\d$'))
+    dispatcher.add_handler(CallbackQueryHandler(confirm_room_selection, pattern='^confirm_rooms$'))
 
     # Register commands
     # start - The /start command
@@ -614,18 +516,22 @@ def main() -> None:
     dispatcher.add_handler(price_conv_handler)
     dispatcher.add_handler(area_conv_handler)
     dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("menu", menu))
-    dispatcher.add_handler(CommandHandler("list", site_list))
-    dispatcher.add_handler(CommandHandler("get_filters", get_filters))
-    # dispatcher.add_handler(CommandHandler("get_offers", get_offers))
+    dispatcher.add_handler(CommandHandler("menu", start))
+    dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_PRICE_RANGE}$'), set_price_start))
+    dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_AREA_RANGE}$'), set_area_start))
+    dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_OFFER_SOURCES}$'), site_list))
+    dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_FILTERS}$'), get_filters))
+    dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_START_MONITORING}$'), start_periodic_check))
+    dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_STOP_MONITORING}$'), stop_periodic_check))
+    dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_ROOMS}$'), start_room_selection))
 
 
-
-    # Echo any message that is not a command
+    # # Echo any message that is not a command
     dispatcher.add_handler(MessageHandler(~Filters.command, echo))
 
-    dispatcher.add_handler(CommandHandler("start_check", start_periodic_check))
-    dispatcher.add_handler(CommandHandler("stop_check", stop_periodic_check))
+    # dispatcher.add_handler(CommandHandler("start_check", start_periodic_check))
+    # dispatcher.add_handler(CommandHandler("stop_check", stop_periodic_check))
+
 
         # Register conversation handler
     dispatcher.add_handler(price_conv_handler)
