@@ -2,6 +2,30 @@ from bs4 import BeautifulSoup
 import sys
 import requests
 
+# selected_rooms = [2,3]
+# selected_rooms_url = '%5BTWO%2CTHREE%5D'
+
+def build_selected_rooms_url(selected_rooms):
+    selected_rooms_url = '%5B'
+    for room in selected_rooms:
+        if room == 1:
+            selected_rooms_url += 'ONE'
+        elif room == 2:
+            selected_rooms_url += 'TWO'
+        elif room == 3:
+            selected_rooms_url += 'THREE'
+        elif room == 4:
+            selected_rooms_url += 'FOUR%2CFIVE%2CSIX_OR_MORE'
+        if room != selected_rooms[-1]:
+            selected_rooms_url += '%2C'
+    
+    selected_rooms_url += '%5D'
+    return selected_rooms_url
+
+def set_type(base_url, offer_type):
+    if offer_type == 'sale':
+        base_url = base_url.replace('wynajem', 'sprzedaz')
+    return base_url
 
 # https://www.otodom.pl/pl/wyniki/wynajem/mieszkanie/mazowieckie/warszawa/warszawa/warszawa?limit=36&priceMin=0&priceMax=3000&areaMin=5&areaMax=50&roomsNumber=%5BTWO%2CTHREE%5D&by=DEFAULT&direction=DESC&viewType=listing
 def build_url(filters):
@@ -13,15 +37,18 @@ def build_url(filters):
     price_max = filters['max_price']
     area_min = filters['area_min']
     area_max = filters['area_max']
-    rooms_number = filters['rooms_number']
+    selected_rooms = filters['selected_rooms']
     by = filters['by']
     direction = filters['direction']
     days = filters['days']
+    offer_type = filters['offer_type']
 
-    url = f"{base_url}ownerTypeSingleSelect={owner_type}&viewType={view_type}&limit={limit}&priceMin={price_min}&priceMax={price_max}&areaMin={area_min}&areaMax={area_max}&roomsNumber={rooms_number}&by={by}&direction={direction}&daysSinceCreated={days}"
+    base_url = set_type(base_url, offer_type)
+
+    selected_rooms_url = build_selected_rooms_url(selected_rooms)
+
+    url = f"{base_url}ownerTypeSingleSelect={owner_type}&viewType={view_type}&limit={limit}&priceMin={price_min}&priceMax={price_max}&areaMin={area_min}&areaMax={area_max}&roomsNumber={selected_rooms_url}&by={by}&direction={direction}"
     return url
-
-
 
 
 

@@ -4,12 +4,17 @@ import requests
 from bs4 import BeautifulSoup
 from otodom_scrapper import scrape_otodom
 from olx_scrapper import scrape_olx
+from nieruchomosci_online_scrapper import scrape_nieruchomosci
 
 from dotenv import load_dotenv
 from collections import defaultdict
 from telegram import Update, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler, ConversationHandler, JobQueue
 from datetime import datetime, timedelta
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +28,15 @@ DEFAULT_USER_DATA = {
     'limit': '36',
     'area_min': '0',
     'area_max': '1000',
-    'rooms_number': '%5BONE%2CTWO%2CTHREE%5D',
     'by': 'DEFAULT',
     'direction': 'DESC',
     'days': '1',
     'last_seen_offer_olx': None,
     'last_seen_offer_otodom': None,
-    'selected_rooms': [1,2,3,4,5,6]
+    'last_seen_offer_nieruchomosci_online': None,
+    'selected_rooms': [1,2,3,4],
+    'selected_sources': ['otodom', 'olx'],
+    'offer_type': 'rent'
 }
 
 user_data = defaultdict(lambda: DEFAULT_USER_DATA.copy())
@@ -42,24 +49,31 @@ offer_sources = [
     {
         'name': 'OLX',
         'url': 'https://www.olx.pl'
+    },
+    {
+        'name': 'Nieruchomości Online',
+        'url': 'https://www.nieruchomosci-online.pl'
     }
 ]
 
 #define names for keyboard buttons
 BTN_OFFER_SOURCES = 'List Offer Sources 📋'
 BTN_FILTERS = 'Show Filters ⚙️'
+BTN_CHANGE_FILTERS = 'Change Filters ⚙️'
 BTN_PRICE_RANGE = 'Set Price Range 🤑'
 BTN_AREA_RANGE = 'Set Area Range 🏰'
 BTN_START_MONITORING = 'Start Monitoring 🕵️'
 BTN_STOP_MONITORING = 'Stop Monitoring 🛑'
 BTN_ROOMS = 'Select Rooms 🛏️'
+BTN_OFFER_TYPE = 'Switch Offer Type 🏠'
 BTN_CANCEL = 'Cancel 🚫'
 
 
 start_menu_keyboard = [
     [BTN_OFFER_SOURCES, BTN_FILTERS],
     [BTN_PRICE_RANGE, BTN_AREA_RANGE],
-    [BTN_ROOMS, BTN_START_MONITORING]
+    [BTN_ROOMS, BTN_OFFER_TYPE],
+    [BTN_START_MONITORING],
 ]
 
 cancel_keyboard = [[BTN_CANCEL]]
@@ -270,6 +284,8 @@ def get_filters(update: Update, context: CallbackContext) -> None:
     area_min = user_data[user_id]['area_min']
     area_max = user_data[user_id]['area_max']
     selected_rooms = user_data[user_id].get('selected_rooms', [])
+    offer_type = user_data[user_id]['offer_type']
+
 
     print(f'User {user_name} requested the filters')
 
@@ -278,91 +294,112 @@ def get_filters(update: Update, context: CallbackContext) -> None:
         f"Current filters:\n"
         f"Price range: {minimum_price} PLN - {maximum_price} PLN\n"
         f"Area range: {area_min} m² - {area_max} m²\n"
-        f"Rooms: {', '.join(f'{room}' for room in sorted(selected_rooms))}",
+        f"Rooms: {', '.join(f'{room}' for room in sorted(selected_rooms))}\n"
+        f"Offer type: {offer_type}",
+        
         
     )
 
 def check_new_offers(context: CallbackContext):
     """This function is run periodically to check for new offers."""
-    job = context.job
-    user_id = job.context['user_id']
-    user_name = context.bot.get_chat(user_id).first_name
 
-    # Extract user-specific filter parameters
-    filters = {
-        'min_price': user_data[user_id]['minimum_price'],
-        'max_price': user_data[user_id]['maximum_price'],
-        'owner_type': user_data[user_id]['owner_type'],
-        'view_type': user_data[user_id]['view_type'],
-        'limit': user_data[user_id]['limit'],
-        'area_min': user_data[user_id]['area_min'],
-        'area_max': user_data[user_id]['area_max'],
-        'rooms_number': user_data[user_id]['rooms_number'],
-        'by': user_data[user_id]['by'],
-        'direction': user_data[user_id]['direction'],
-        'days': user_data[user_id]['days']
-    }
+    try:
+        job = context.job
+        user_id = job.context['user_id']
+        user_name = context.bot.get_chat(user_id).first_name
 
-    # Initialize the sites and corresponding scraping functions
-    sites = {
-        'otodom': scrape_otodom,
-        'olx': scrape_olx,
-        # Add other sites and their respective scraping functions here
-        # 'other_site': scrape_other_site_function,
-    }
+        # Extract user-specific filter parameters
+        filters = {
+            'min_price': user_data[user_id]['minimum_price'],
+            'max_price': user_data[user_id]['maximum_price'],
+            'owner_type': user_data[user_id]['owner_type'],
+            'view_type': user_data[user_id]['view_type'],
+            'limit': user_data[user_id]['limit'],
+            'area_min': user_data[user_id]['area_min'],
+            'area_max': user_data[user_id]['area_max'],
+            'selected_rooms': user_data[user_id]['selected_rooms'],
+            'by': user_data[user_id]['by'],
+            'direction': user_data[user_id]['direction'],
+            'days': user_data[user_id]['days'],
+            'offer_type': user_data[user_id]['offer_type']
 
-    print(f'Checking for new offers for user {user_id}...')
+        }
 
-    # Loop through each site and scrape offers
-    for site, scrape_function in sites.items():
-        print(f'Checking {site} for new offers for user {user_name}...')
-        
-        offers = scrape_function(filters)
+        # Initialize the sites and corresponding scraping functions
+        sites = {
+            'otodom': scrape_otodom,
+            'olx': scrape_olx,
+            'nieruchomosci_online': scrape_nieruchomosci,
+            # Add other sites and their respective scraping functions here
+            # 'other_site': scrape_other_site_function,
+        }
 
-        if offers:
-            new_offers = []
-            last_seen_offer = user_data[user_id].get(f'last_seen_offer_{site}')
+        print(f'Checking for new offers for user {user_id}...')
 
-            for offer in offers:
-                # Compare with the last seen offer for this specific site
-                if last_seen_offer is None or offer['link'] != last_seen_offer:
-                    new_offers.append(offer)
+        # Loop through each site and scrape offers
+        for site, scrape_function in sites.items():
+            print(f'Checking {site} for new offers for user {user_name}...')
+            
+            offers = scrape_function(filters)
+
+            if offers:
+                new_offers = []
+                last_seen_offer = user_data[user_id].get(f'last_seen_offer_{site}')
+
+                for offer in offers:
+                    # Compare with the last seen offer for this specific site
+                    if last_seen_offer is None or offer['link'] != last_seen_offer:
+                        new_offers.append(offer)
+                    else:
+                        break  # Stop as we've reached offers we've seen before
+
+                if new_offers:
+                    if not last_seen_offer: 
+                        new_offers = new_offers[:5]  # Limit to the 5 most recent offers
+                    for offer in new_offers:
+                        if site == 'otodom':
+                            context.bot.send_message(
+                                user_id,
+                                f"New offer found on {site}!\n"
+                                f"Title: {offer['title']}\n"
+                                f"Price: {offer['price']}\n"
+                                f"Location: {offer['location']}\n"
+                                f"Area: {offer['area']}\n"
+                                f"Rooms: {offer['room_count']}\n"
+                                f"Floor: {offer['floor']}\n"
+                                f"Link: {offer['link']}\n"
+                            )
+                        elif site == 'olx':
+                            context.bot.send_message(
+                                user_id,
+                                f"New offer found on {site}!\n"
+                                f"Title: {offer['title']}\n"
+                                f"Price: {offer['price']}\n"
+                                f"Location: {offer['location']}\n"
+                                f"Updated: {offer['updated_date']}\n"
+                                f"Area: {offer['area']}\n"
+                                f"Link: {offer['link']}\n"
+                            )
+                        elif site == 'nieruchomosci_online':
+                            print(offer)
+                            context.bot.send_message(
+                                user_id,
+                                f"New offer found on {site}!\n"
+                                f"Title: {offer['title']}\n"
+                                f"Price: {offer['price']}\n"
+                                f"Location: {offer['location']}\n"
+                                f"Area: {offer['area']}\n"
+                                f"Link: {offer['link']}\n"
+                            )
+                    # Update the last seen offer for this site
+                    user_data[user_id][f'last_seen_offer_{site}'] = new_offers[0]['link']
                 else:
-                    break  # Stop as we've reached offers we've seen before
+                    print(f"No new offers found on {site}.")
 
-            if new_offers:
-                if not last_seen_offer: 
-                    new_offers = new_offers[:5]  # Limit to the 5 most recent offers
-                for offer in new_offers:
-                    if site == 'otodom':
-                        context.bot.send_message(
-                            user_id,
-                            f"New offer found on {site}!\n"
-                            f"Title: {offer['title']}\n"
-                            f"Price: {offer['price']}\n"
-                            f"Location: {offer['location']}\n"
-                            f"Area: {offer['area']}\n"
-                            f"Rooms: {offer['room_count']}\n"
-                            f"Floor: {offer['floor']}\n"
-                            f"Link: {offer['link']}\n"
-                        )
-                    elif site == 'olx':
-                        context.bot.send_message(
-                            user_id,
-                            f"New offer found on {site}!\n"
-                            f"Title: {offer['title']}\n"
-                            f"Price: {offer['price']}\n"
-                            f"Location: {offer['location']}\n"
-                            f"Updated: {offer['updated_date']}\n"
-                            f"Area: {offer['area']}\n"
-                            f"Link: {offer['link']}\n"
-                        )
-                # Update the last seen offer for this site
-                user_data[user_id][f'last_seen_offer_{site}'] = new_offers[0]['link']
-            else:
-                print(f"No new offers found on {site}.")
-
-    print("Finished checking all sites.")
+        print("Finished checking all sites.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        
 
 
 def start_periodic_check(update: Update, context: CallbackContext) -> None:
@@ -413,6 +450,7 @@ def stop_periodic_check(update: Update, context: CallbackContext) -> None:
     # Remove last seen offers
     user_data[user_id]['last_seen_offer_olx'] = None
     user_data[user_id]['last_seen_offer_otodom'] = None
+    user_data[user_id]['last_seen_offer_nieruchomosci_online'] = None
 
 
     for job in current_jobs:
@@ -433,7 +471,7 @@ def room_selection_menu(update: Update, context: CallbackContext):
         [InlineKeyboardButton(f"2 Rooms {'✅' if 2 in selected_rooms else '❌'}", callback_data='room_2')],
         [InlineKeyboardButton(f"3 Rooms {'✅' if 3 in selected_rooms else '❌'}", callback_data='room_3')],
         [InlineKeyboardButton(f"4+ Rooms {'✅' if 4 in selected_rooms else '❌'}", callback_data='room_4')],
-        [InlineKeyboardButton("Confirm", callback_data='confirm_rooms')],
+        # [InlineKeyboardButton("Confirm", callback_data='confirm_rooms')],
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -467,9 +505,18 @@ def confirm_room_selection(update: Update, context: CallbackContext):
 def start_room_selection(update: Update, context: CallbackContext):
     room_selection_menu(update, context)
 
+def offer_type_switch(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    user_data[user_id]['offer_type'] = 'rent' if user_data[user_id]['offer_type'] == 'sale' else 'sale'
+    context.bot.send_message(user_id, f"Offer type switched to {user_data[user_id]['offer_type']}.", reply_markup=get_markup(user_id))
+
+
+
 def main() -> None:
     load_dotenv()
     token = os.getenv('TELEGRAM_BOT_TOKEN')
+
+
     updater = Updater(token)
     print(f'Bot started with token {token}')
     job_queue = updater.job_queue
@@ -524,7 +571,7 @@ def main() -> None:
     dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_START_MONITORING}$'), start_periodic_check))
     dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_STOP_MONITORING}$'), stop_periodic_check))
     dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_ROOMS}$'), start_room_selection))
-
+    dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_OFFER_TYPE}$'), offer_type_switch))
 
     # # Echo any message that is not a command
     dispatcher.add_handler(MessageHandler(~Filters.command, echo))
