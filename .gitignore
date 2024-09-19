@@ -22,3 +22,5 @@ package-lock.json
 # Ignore operating system files
 .DS_Store
 Thumbs.db
+
+.md
