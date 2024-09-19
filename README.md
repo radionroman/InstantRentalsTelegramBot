@@ -25,8 +25,8 @@ This Telegram bot allows users to monitor real estate offers from popular websit
 
 1. **Clone the Repository**
     ```bash
-    git clone https://github.com/yourusername/real-estate-scraper-bot.git
-    cd real-estate-scraper-bot
+    git clone https://github.com/radionroman/InstantRentalsTelegramBot
+    cd InstantRentalsTelegramBot
     ```
 
 2. **Create a Virtual Environment**
