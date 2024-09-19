@@ -37,7 +37,7 @@ def build_url(filters):
 
     base_url = set_type(base_url, offer_type)
 
-    url = f"{base_url},,,,,{price_min}-{price_max},{area_min}-{area_max},,,,,,,{selected_rooms[0]}-{selected_rooms[-1]}"
+    url = f"{base_url},,,,{price_min}-{price_max},{area_min}-{area_max},,,,,,,{selected_rooms[0]}-{selected_rooms[-1]}"
 
 
     return url
