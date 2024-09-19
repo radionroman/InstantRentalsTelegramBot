@@ -27,9 +27,17 @@ def set_type(base_url, offer_type):
         base_url = base_url.replace('wynajem', 'sprzedaz')
     return base_url
 
+def set_region_and_city(url, region, city):
+    #remove polish characters
+    city = city['url']
+    url = url.replace('warszawa', city.lower())
+    url = url.replace('mazowieckie', region.lower().replace('ą', 'a').replace('ł', 'l').replace('ń', 'n').replace('ć', 'c').replace('ó', 'o').replace('ę', 'e').replace('ś', 's').replace('ż', 'z').replace('ź', 'z'))
+    return url
+
 # https://www.otodom.pl/pl/wyniki/wynajem/mieszkanie/mazowieckie/warszawa/warszawa/warszawa?limit=36&priceMin=0&priceMax=3000&areaMin=5&areaMax=50&roomsNumber=%5BTWO%2CTHREE%5D&by=DEFAULT&direction=DESC&viewType=listing
 def build_url(filters):
     base_url = 'https://www.otodom.pl/pl/wyniki/wynajem/mieszkanie/mazowieckie/warszawa/warszawa/warszawa?'
+    base_url = set_region_and_city(base_url, filters['region'], filters['city'])
     owner_type = filters['owner_type']
     view_type =  filters['view_type']
     limit = filters['limit']
@@ -55,7 +63,7 @@ def build_url(filters):
 def scrape_otodom(filters):
     # url = offer_sources[0]['url']
     url = build_url(filters)
-    print("Requesting", url)
+    print("Requesting", url) 
     response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
 
 

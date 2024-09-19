@@ -29,7 +29,9 @@ def check_new_offers(context: CallbackContext):
             'by': db.user_data[user_id]['by'],
             'direction': db.user_data[user_id]['direction'],
             'days': db.user_data[user_id]['days'],
-            'offer_type': db.user_data[user_id]['offer_type']
+            'offer_type': db.user_data[user_id]['offer_type'],
+            'region': db.user_data[user_id]['region'],
+            'city': db.user_data[user_id]['city'],
 
         }
 
@@ -42,11 +44,11 @@ def check_new_offers(context: CallbackContext):
             # 'other_site': scrape_other_site_function,
         }
 
-        print(f'Checking for new offers for user {user_id}...')
+        print(f'Checking for new offers for user {user_name}...') if db.user_data["verbose"] > 0 else None
 
         # Loop through each site and scrape offers
         for site, scrape_function in sites.items():
-            print(f'Checking {site} for new offers for user {user_name}...')
+            print(f'Checking {site} for new offers for user {user_name}...') if db.user_data["verbose"] > 0 else None
             
             offers = scrape_function(filters)
 
@@ -89,7 +91,6 @@ def check_new_offers(context: CallbackContext):
                                 f"Link: {offer['link']}\n"
                             )
                         elif site == 'nieruchomosci_online':
-                            print(offer)
                             context.bot.send_message(
                                 user_id,
                                 f"New offer found on {site}!\n"
@@ -102,12 +103,12 @@ def check_new_offers(context: CallbackContext):
                     # Update the last seen offer for this site
                     db.user_data[user_id][f'last_seen_offer_{site}'] = new_offers[0]['link']
                 else:
-                    print(f"No new offers found on {site}.")
+                    print(f"No new offers found on {site}.") if db.user_data["verbose"] > 0 else None
 
-        print("Finished checking all sites.")
+        print("Finished checking all sites.") if db.user_data["verbose"] > 0 else None
     except Exception as e:
-        print(f"An error occurred: {e}")
-        
+        print(f"An error occurred: {e}") if db.user_data["verbose"] > 0 else None
+        context.bot.send_message(user_id, "An error occurred while checking for new offers. Please try again later.", reply_markup=start_menu_markup)
 
 
 def start_periodic_check(update: Update, context: CallbackContext) -> None:
@@ -128,7 +129,7 @@ def start_periodic_check(update: Update, context: CallbackContext) -> None:
         return
     context.bot.send_message(user_id, "I'll start checking for new offers every 10 minutes.", reply_markup=stop_monitoring_markup)
 
-    print("Starting periodic check for user", user_name)
+    print("Starting periodic check for user", user_name) if db.user_data["verbose"] > 0 else None
     # Start a job that checks for new offers every 10 minutes
     job_queue = context.job_queue
     # Function to execute immediately
@@ -162,5 +163,5 @@ def stop_periodic_check(update: Update, context: CallbackContext) -> None:
 
 
     for job in current_jobs:
-        print(f'Removing job {job}')
+        print(f'Removing job {job}') if db.user_data["verbose"] > 0 else None
         job.schedule_removal()

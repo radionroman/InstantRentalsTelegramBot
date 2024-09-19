@@ -15,7 +15,8 @@ def get_offer_sources(update: Update, context: CallbackContext) -> None:
         user_id = update.callback_query.from_user.id
         user_name = update.callback_query.from_user.first_name
 
-    print(f'user {user_name} requested the list of offer sources')
+    print(f'user {user_name} requested the list of offer sources') if db.user_data["verbose"] > 0 else None
+    
     context.bot.send_message(
         user_id,
         "Here are the available offer sources:\n\n"

@@ -9,6 +9,7 @@ from src.commands.room_selection import room_selection, start_room_selection, co
 from src.commands.get_filters import get_filters
 from src.commands.get_offer_sources import get_offer_sources
 from src.commands.monitoring import start_periodic_check, stop_periodic_check
+from src.commands.set_location import location_conv_handler, set_location_start
 
 from dotenv import load_dotenv
 from collections import defaultdict
@@ -27,10 +28,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def echo(update: Update, context: CallbackContext) -> None:
-    """
-    This function would be added to the dispatcher as a handler for messages coming from the Bot API
-    """
-    # Print to console
     print(f'{update.message.from_user.first_name} wrote {update.message.text}')
     update.message.reply_text("I'm sorry, I'm not sure what you mean. Please use the /menu command to see the available options.")
 
@@ -47,13 +44,9 @@ def offer_type_switch(update: Update, context: CallbackContext):
 
 
 def main() -> None:
-    load_dotenv()
+    load_dotenv(override=True)
     token = os.getenv('TELEGRAM_BOT_TOKEN')
-
-
     updater = Updater(token)
-    print(f'Bot started with token {token}')
-    job_queue = updater.job_queue
 
     # Get the dispatcher to register handlers
     # Then, we register each handler and the conditions the update must meet to trigger it
@@ -62,8 +55,11 @@ def main() -> None:
     dispatcher.add_handler(CallbackQueryHandler(confirm_room_selection, pattern='^confirm_rooms$'))
     dispatcher.add_handler(price_conv_handler)
     dispatcher.add_handler(area_conv_handler)
+    dispatcher.add_handler(location_conv_handler)
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("menu", start))
+
+    
     dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_PRICE_RANGE}$'), set_price_start))
     dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_AREA_RANGE}$'), set_area_start))
     dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_OFFER_SOURCES}$'), get_offer_sources))
@@ -72,6 +68,8 @@ def main() -> None:
     dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_STOP_MONITORING}$'), stop_periodic_check))
     dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_ROOMS}$'), start_room_selection))
     dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_OFFER_TYPE}$'), offer_type_switch))
+    dispatcher.add_handler(MessageHandler(Filters.regex(f'^{BTN_SET_LOCATION}$'), set_location_start))
+
     dispatcher.add_handler(MessageHandler(~Filters.command, echo))
     
     # Start the Bot

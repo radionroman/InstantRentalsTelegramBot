@@ -18,6 +18,8 @@ def set_price_start(update: Update, context: CallbackContext) -> int:
         user_id = update.callback_query.from_user.id
         user_name = update.callback_query.from_user.first_name
 
+    print(f'user {user_name} started setting the price range') if db.user_data["verbose"] > 0 else None
+
     context.bot.send_message(user_id, "Please enter the minimum price in PLN.", reply_markup=cancel_markup)
     return MIN_PRICE
 
@@ -26,7 +28,6 @@ def set_min_price(update: Update, context: CallbackContext) -> int:
     Stores the minimum price and asks for the maximum price.
     """
     try:
-        print('set_min_price')
         if update.message:
             user_id = update.message.from_user.id
         else:

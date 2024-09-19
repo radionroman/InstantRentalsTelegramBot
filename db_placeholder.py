@@ -5,3 +5,4 @@ from collections import defaultdict
 def init():
     global user_data 
     user_data = defaultdict(lambda: DEFAULT_USER_DATA.copy())
+    user_data["verbose"] = 1

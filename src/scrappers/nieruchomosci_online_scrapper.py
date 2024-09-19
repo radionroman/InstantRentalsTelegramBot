@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+import urllib
 
 
 # https://www.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,wynajem,,Warszawa:20571,,,,1000-2500,40-70,,,,,,1-4
@@ -9,9 +10,17 @@ def set_type(base_url, offer_type):
         base_url = base_url.replace('wynajem', 'sprzedaz')
     return base_url
 
+def set_city(base_url, city):
+    city = city['text_simple']
+    # incode city name to url format
+    city = urllib.parse.quote(city)
+    base_url = base_url.replace('Warszawa', city)
+    return base_url
+
 
 def build_url(filters):
-    base_url = 'https://www.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,wynajem,,Warszawa:20571'
+    base_url = 'https://www.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,wynajem,,Warszawa'
+    base_url = set_city(base_url, filters['city'])
     owner_type = filters['owner_type']
     view_type =  filters['view_type']
     limit = filters['limit']
@@ -25,6 +34,7 @@ def build_url(filters):
     days = filters['days']
     offer_type = filters['offer_type']
 
+
     base_url = set_type(base_url, offer_type)
 
     url = f"{base_url},,,,,{price_min}-{price_max},{area_min}-{area_max},,,,,,,{selected_rooms[0]}-{selected_rooms[-1]}"
@@ -35,7 +45,7 @@ def build_url(filters):
 def scrape_nieruchomosci(filters):
     url = build_url(filters)
 
-    print("Requesting", url)
+    print("Requesting", url) 
     response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
     soup = BeautifulSoup(response.content, 'html.parser')
 
@@ -51,7 +61,6 @@ def scrape_nieruchomosci(filters):
         price = offer.find('p', class_='title-a primary-display').find_all('span')[0].text.strip()
         area = offer.find('p', class_='title-a primary-display').find('span', class_='area').text.strip()
 
-        print(title, link, location, price, area)
         listings.append({
             'title': title,
             'link': link,

@@ -33,8 +33,9 @@ def room_selection(update: Update, context: CallbackContext):
     query = update.callback_query
     room_number = int(query.data.split('_')[1])  # Extract the room number from callback data
     user_id = query.from_user.id
+    user_name = query.from_user.first_name
     selected_rooms = db.user_data[user_id]['selected_rooms']
-    print(f'User {user_id} selected {room_number} rooms.')
+    print(f'User {user_name} selected {room_number} rooms.') if db.user_data["verbose"] > 0 else None
     # Toggle selection
     if room_number in selected_rooms:
         selected_rooms.remove(room_number)

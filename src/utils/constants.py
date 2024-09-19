@@ -25,9 +25,11 @@ BTN_START_MONITORING = 'Start Monitoring 🕵️'
 BTN_STOP_MONITORING = 'Stop Monitoring 🛑'
 BTN_ROOMS = 'Select Rooms 🛏️'
 BTN_OFFER_TYPE = 'Switch Offer Type 🏠'
+BTN_SET_LOCATION = 'Set Location 📍'
 BTN_CANCEL = 'Cancel 🚫'
 
 DEFAULT_USER_DATA = {
+    'language': 'en',
     'minimum_price': 0,
     'maximum_price': 1000000,
     'owner_type': 'ALL',
@@ -43,5 +45,7 @@ DEFAULT_USER_DATA = {
     'last_seen_offer_nieruchomosci_online': None,
     'selected_rooms': [1,2,3,4],
     'selected_sources': ['otodom', 'olx'],
-    'offer_type': 'rent'
+    'offer_type': 'rent',
+    'region': 'Mazowieckie',
+    'city': {"text":"Warszawa","url":"warszawa", "text_simple":"Warszawa"}
 }

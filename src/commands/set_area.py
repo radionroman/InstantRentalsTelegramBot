@@ -67,7 +67,6 @@ def cancel_area(update: Update, context: CallbackContext) -> int:
         user_id = update.callback_query.from_user.id
         user_name = update.callback_query.from_user.first_name
 
-
     context.bot.send_message(user_id, "Operation cancelled.", reply_markup=get_markup(db.user_data,user_id))
     return ConversationHandler.END
 

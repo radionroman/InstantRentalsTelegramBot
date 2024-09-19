@@ -26,9 +26,16 @@ def set_type(base_url, offer_type):
         base_url = base_url.replace('wynajem', 'sprzedaz')
     return base_url
 
+def set_region_and_city(url, region, city):
+    #remove polish characters
+    city = city['url']
+    url = url.replace('warszawa', city.lower())
+    return url
+
 # https://www.olx.pl/nieruchomosci/mieszkania/wynajem/warszawa/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:from%5D=1000&search%5Bfilter_float_m:from%5D=25&search%5Bfilter_float_m:to%5D=50&search%5Bfilter_enum_rooms%5D%5B0%5D=one&search%5Bfilter_enum_rooms%5D%5B1%5D=two
 def build_url(filters):
     base_url = 'https://www.olx.pl/nieruchomosci/mieszkania/wynajem/warszawa/?'
+    base_url = set_region_and_city(base_url, filters['region'], filters['city'])
     owner_type = filters['owner_type']
     view_type =  filters['view_type']
     limit = filters['limit']
@@ -41,12 +48,16 @@ def build_url(filters):
     direction = filters['direction']
     days = filters['days']
     offer_type = filters['offer_type']
+    region = filters['region']
+    city = filters['city']
 
     base_url = set_type(base_url, offer_type)
 
     selected_rooms_url = build_selected_rooms_url(selected_rooms)
 
     url = f"{base_url}search%5Border%5D=created_at:desc&search%5Bfilter_float_price:from%5D={price_min}&search%5Bfilter_float_price:to%5D={price_max}&search%5Bfilter_float_m:from%5D={area_min}&search%5Bfilter_float_m:to%5D={area_max}&{selected_rooms_url}"
+    
+    
     return url
 
 
@@ -55,7 +66,7 @@ def build_url(filters):
 
 def scrape_olx(filters):
     url = build_url(filters)
-    print("Requesting", url)
+    print("Requesting", url) 
     response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
     soup = BeautifulSoup(response.content, 'html.parser')
 
