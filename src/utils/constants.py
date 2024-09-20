@@ -47,5 +47,6 @@ DEFAULT_USER_DATA = {
     'selected_sources': ['otodom', 'olx'],
     'offer_type': 'rent',
     'region': 'Mazowieckie',
-    'city': {"text":"Warszawa","url":"warszawa", "text_simple":"Warszawa"}
+    'city': {"text":"Warszawa","url":"warszawa", "text_simple":"Warszawa"},
+    'displayed_offers': set(),
 }

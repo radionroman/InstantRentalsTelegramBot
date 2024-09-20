@@ -51,6 +51,7 @@ def set_max_area(update: Update, context: CallbackContext) -> int:
         db.user_data[user_id]['area_max'] = maximum_area
 
         update.message.reply_text(f"Area range set to {minimum_area} m² - {maximum_area} m².", reply_markup=get_markup(db.user_data,user_id))
+        db.user_data[user_id]['displayed_offers'] = set()
         return ConversationHandler.END
     except ValueError:
         update.message.reply_text("Please enter a valid number for the maximum area.")

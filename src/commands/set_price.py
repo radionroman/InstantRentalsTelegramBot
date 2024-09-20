@@ -62,6 +62,7 @@ def set_max_price(update: Update, context: CallbackContext) -> int:
         db.user_data[user_id]['maximum_price'] = maximum_price
 
         context.bot.send_message(user_id, f"Price range set to {minimum_price} PLN - {maximum_price} PLN.", reply_markup=get_markup(db.user_data,user_id))
+        db.user_data[user_id]['displayed_offers'] = set()
         return ConversationHandler.END
     except ValueError:
         update.message.reply_text("Please enter a valid number for the maximum price.")

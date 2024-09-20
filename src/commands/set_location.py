@@ -58,6 +58,7 @@ def set_location(update: Update, context: CallbackContext) -> int:
     db.user_data[user_id]['city'] = {"text" : city['text'], "url" : city['url'], "text_simple" : city['text_simple']}
 
     update.message.reply_text(f"Location set to {city['text_simple']}, {region}.", reply_markup=get_markup(db.user_data,user_id))
+    db.user_data[user_id]['displayed_offers'] = set()
     return ConversationHandler.END
 
 def cancel_location(update: Update, context: CallbackContext) -> int:

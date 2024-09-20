@@ -58,10 +58,11 @@ def check_new_offers(context: CallbackContext):
 
                 for offer in offers:
                     # Compare with the last seen offer for this specific site
-                    if last_seen_offer is None or offer['link'] != last_seen_offer:
-                        new_offers.append(offer)
-                    else:
-                        break  # Stop as we've reached offers we've seen before
+                    if offer['link'] in db.user_data[user_id]['displayed_offers']:
+                        break
+                    db.user_data[user_id]['displayed_offers'].add(offer['link'])
+                    new_offers.append(offer)
+  # Stop as we've reached offers we've seen before
 
                 if new_offers:
                     if not last_seen_offer: 
@@ -102,6 +103,7 @@ def check_new_offers(context: CallbackContext):
                             )
                     # Update the last seen offer for this site
                     db.user_data[user_id][f'last_seen_offer_{site}'] = new_offers[0]['link']
+
                 else:
                     print(f"No new offers found on {site}.") if db.user_data["verbose"] > 0 else None
 
@@ -140,7 +142,7 @@ def start_periodic_check(update: Update, context: CallbackContext) -> None:
     job_queue = context.job_queue
     job_queue.run_once(run_now, when=0, context={'user_id': user_id})
     # Run the job every 10 minutes (including right now)
-    job_queue.run_repeating(check_new_offers, interval=600, first=0, context={'user_id': user_id}, name=str(user_id))
+    job_queue.run_repeating(check_new_offers, interval=240, first=0, context={'user_id': user_id}, name=str(user_id))
 
 def stop_periodic_check(update: Update, context: CallbackContext) -> None:
     """Stops the periodic job for checking new offers."""

@@ -49,6 +49,7 @@ def confirm_room_selection(update: Update, context: CallbackContext):
     user_id = update.callback_query.from_user.id
     selected_rooms = db.user_data[user_id]['selected_rooms']
     room_list = ', '.join(f'{room} room(s)' for room in sorted(selected_rooms))
+    db.user_data[user_id]['displayed_offers'] = set()
     context.bot.send_message(update.effective_chat.id, f"You have selected: {room_list}.")
 
 def start_room_selection(update: Update, context: CallbackContext):
