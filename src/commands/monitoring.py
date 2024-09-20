@@ -110,7 +110,7 @@ def check_new_offers(context: CallbackContext):
         print("Finished checking all sites.") if db.user_data["verbose"] > 0 else None
     except Exception as e:
         print(f"An error occurred: {e}") if db.user_data["verbose"] > 0 else None
-        context.bot.send_message(user_id, "An error occurred while checking for new offers. Please try again later.", reply_markup=start_menu_markup)
+        context.bot.send_message(user_id, "An error occurred while checking for new offers. Please try again later.", reply_markup=stop_monitoring_markup)
 
 
 def start_periodic_check(update: Update, context: CallbackContext) -> None:
