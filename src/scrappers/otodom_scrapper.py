@@ -59,62 +59,6 @@ def build_url(filters):
     return url
 
 
-
-def scrape_otodom(filters):
-    # url = offer_sources[0]['url']
-    url = build_url(filters)
-    print("Requesting", url) 
-    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-
-
-    soup = BeautifulSoup(response.content, 'html.parser')
-
-
-    listings = []
-
-    # Find all listings
-    sections = soup.find_all('section', class_='eeungyz1 css-hqx1d9 e12fn6ie0')
-    
-    index = 0
-    for section in sections:
-        index += 1
-        if index <= 3:
-            continue
-        
-        # Extract the title
-        title_tag = section.find('a', class_='css-16vl3c1 e17g0c820')
-        title = title_tag.text.strip() if title_tag else None
-        
-        # Extract the link
-        link = title_tag['href'] if title_tag else None
-        
-        # Extract the price
-        price_tag = section.find('span', class_='css-2bt9f1 evk7nst0')
-        price = price_tag.text.strip().replace(u'\xa0', ' ') if price_tag else None
-        
-        # Extract the location
-        location_tag = section.find('p', class_='css-42r2ms eejmx80')
-        location = location_tag.text.strip() if location_tag else None
-        
-        # Extract room count, area, and floor
-        details = section.find('div', class_='css-1c1kq07 e1clni9t0')
-        room_count = details.find('dd').text if details.find('dt').text == 'Liczba pokoi' else None
-        area = details.find_all('dd')[1].text if len(details.find_all('dd')) > 1 else None
-        floor = details.find_all('dd')[2].text if len(details.find_all('dd')) > 2 else None
-
-        listings.append({
-            'title': title,
-            'link': f"https://www.otodom.pl{link}" if link else None,
-            'price': price,
-            'location': location,
-            'room_count': room_count,
-            'area': area,
-            'floor': floor
-        })
-
-    return listings
-
-
 if __name__ == '__main__':
     if len(sys.argv) != 3:
         print('Usage: python otodom_scrapper.py <min_price> <max_price>')
@@ -123,4 +67,107 @@ if __name__ == '__main__':
     min_price = int(sys.argv[1])
     max_price = int(sys.argv[2])
 
-    
+    from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+import requests
+
+OTODOM = "https://www.otodom.pl"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept-Language": "pl,en;q=0.9",
+}
+
+def _txt(el):
+    return el.get_text(strip=True) if el else None
+
+def _infer_spec(text):
+    """Return ('rooms'|'area'|'floor', cleaned_value) or (None, None)."""
+    if not text:
+        return None, None
+    t = text.lower()
+    if 'pok' in t:   # '1 pokój', '2 pokoje', etc.
+        return 'rooms', text
+    if 'm²' in t or 'm2' in t:
+        return 'area', text
+    if 'piętro' in t or 'pietro' in t:
+        return 'floor', text
+    return None, None
+
+def _is_promoted(card):
+    # promoted if any ancestor has the promoted container marker
+    par = card
+    while par:
+        if getattr(par, 'attrs', None) and par.attrs.get('data-cy') == 'search.listing.promoted':
+            return True
+        par = par.parent
+    # soft fallback: look for "PODBITE" badge / label near the card
+    if card.find(string=lambda s: isinstance(s, str) and 'PODBITE' in s.upper()):
+        return True
+    return False
+
+def parse_listing_card(card):
+    # Link + Title
+    link_a = card.select_one('a[data-cy="listing-item-link"]')
+    link = urljoin(OTODOM, link_a['href']) if link_a and link_a.has_attr('href') else None
+
+    title_el = card.select_one('[data-cy="listing-item-title"]')
+    title = _txt(title_el)
+
+    # Price (main + possible extra like '+ czynsz...')
+    price_main_el = card.select_one('span[data-sentry-element="MainPrice"]')
+    price_main = _txt(price_main_el)
+    # the extra is often the next sibling span inside the same price wrapper
+    price_extra = None
+    if price_main_el and price_main_el.parent:
+        extra_spans = [s for s in price_main_el.parent.find_all('span') if s is not price_main_el]
+        if extra_spans:
+            price_extra = _txt(extra_spans[0])
+
+    # Address
+    address_el = card.select_one('p[data-sentry-component="Address"]')
+    address = _txt(address_el)
+
+    # Specs: rooms / area / floor
+    rooms = area = floor = None
+    # The grid uses a <dl> list; dd holds human text like '1 pokój', '30 m²', '10 piętro'
+    for dd in card.select('dl dd'):
+        val = _txt(dd)
+        kind, cleaned = _infer_spec(val)
+        if kind == 'rooms' and rooms is None:
+            rooms = cleaned
+        elif kind == 'area' and area is None:
+            area = cleaned
+        elif kind == 'floor' and floor is None:
+            floor = cleaned
+
+    return {
+        'title': title,
+        'link': link,
+        'price': price_main,
+        'price_extra': price_extra,
+        'location': address,
+        'room_count': rooms,
+        'area': area,
+        'floor': floor,
+        'promoted': _is_promoted(card),
+    }
+
+def scrape_otodom(filters):
+    url = build_url(filters)  
+    print("Requesting", url)
+    r = requests.get(url, headers=HEADERS, timeout=20)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.content, 'html.parser')
+
+    # This matches both "Promowane ogłoszenia" and regular list cards
+    cards = soup.select('article[data-sentry-component="AdvertCard"]')
+
+    listings = []
+    for card in cards:
+        data = parse_listing_card(card)
+        # require at least a link to consider it a valid listing
+        if data.get('link'):
+            listings.append(data)
+
+    return listings

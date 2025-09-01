@@ -1,6 +1,8 @@
 from bs4 import BeautifulSoup
 import sys
 import requests
+import re
+from urllib.parse import urljoin
 
 # <div class="css-wsrviy" data-testid="qa-header-message"><div class="css-1kbfsd9"></div><div><p class="css-8gj8ho"></p><p class="css-196yitg">Nie znaleźliśmy żadnych wyników, ale poniżej znajdziesz ogłoszenia powiązane z ostatnio oglądanymi ogłoszeniami:</p></div></div>
 
@@ -64,70 +66,108 @@ def build_url(filters):
 
 
 
+OLX = "https://www.olx.pl"
+
+AREA_RE = re.compile(r'(\d+(?:[.,]\d+)?)\s*(?:m²|m2)\b', re.IGNORECASE)
+
+def _txt(el):
+    return el.get_text(strip=True) if el else None
+
+def _first(soup, selectors):
+    for sel in selectors:
+        n = soup.select_one(sel)
+        if n:
+            return n
+    return None
+
+def _area_from_blueprint(card):
+
+    block = card.select_one('[data-testid="blueprint-card-param-icon"]')
+    if block:
+        parent_text = _txt(block.parent)  # e.g. "25 m²"
+        if parent_text and AREA_RE.search(parent_text):
+            return AREA_RE.search(parent_text).group(0)
+
+    for el in card.select('span, p, li, dd, div'):
+        t = _txt(el)
+        if t and AREA_RE.search(t):
+            return AREA_RE.search(t).group(0)
+    return None
+
+def _is_featured(card):
+    if card.find(string=lambda s: isinstance(s, str) and 'wyróżnione' in s.lower()):
+        return True
+    
+    if card.find(string=lambda s: isinstance(s, str) and 'promowan' in s.lower()):
+        return True
+    return False
+
+def parse_card(card):
+
+    title_block = card.select_one('[data-cy="ad-card-title"]')
+    link_a = None
+    if title_block:
+        link_a = title_block.select_one('a[href]')
+    if not link_a:
+        link_a = _first(card, ['a.css-1tqlkj0[href]', 'a[href^="/d/oferta/"]', 'a[href^="/oferta/"]'])
+    href = link_a['href'] if link_a and link_a.has_attr('href') else None
+    if href and href.startswith('/'):
+        href = urljoin(OLX, href)
+
+    title_el = title_block.select_one('h4') if title_block else None
+    title = _txt(title_el) or (link_a.get('title') if link_a and link_a.has_attr('title') else None)
+
+    price_el = card.select_one('[data-testid="ad-price"]')
+    price = _txt(price_el)
+    if price:
+        price = price.replace('\xa0', ' ')
+
+    loc_el = card.select_one('[data-testid="location-date"]')
+    location = updated_date = None
+    if loc_el:
+        raw = _txt(loc_el)
+        if raw and ' - ' in raw:
+            location, updated_date = [s.strip() for s in raw.split(' - ', 1)]
+        else:
+            location = raw
+
+    area = _area_from_blueprint(card)
+
+    return {
+        'title': title,
+        'link': href,
+        'price': price,
+        'location': location,
+        'updated_date': updated_date,
+        'area': area,
+        'featured': _is_featured(card),
+    }
+
 def scrape_olx(filters):
-    url = build_url(filters)
-    print("Requesting", url) 
-    response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-    soup = BeautifulSoup(response.content, 'html.parser')
+    url = build_url(filters) 
+    print("Requesting", url)
+    r = requests.get(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept-Language": "pl,en;q=0.9",
+    }, timeout=20)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.content, 'html.parser')
 
 
+
+    if soup.select_one('[data-testid="qa-header-message"]'):
+        return []
+
+    cards = soup.select('[data-cy="l-card"][data-testid="l-card"]') or \
+            soup.select('[data-cy="l-card"]') or \
+            soup.select('[data-testid="l-card"]')
 
     listings = []
-
-    if soup.find('div', class_='css-wsrviy'):
-        return listings
-
-    # Find all listings by selecting the main div that holds each offer
-    offers = soup.find_all('div', class_='css-1g5933j')
-
-    for offer in offers:
-        # Extract the title
-
-        if offer.find('div', {'data-testid': 'adCard-featured'}):
-            continue
-    
-        title_tag = offer.find('h6', class_='css-1wxaaza')
-        title = title_tag.text.strip() if title_tag else None
+    for card in cards:
+        data = parse_card(card)
         
-        # Extract the link
-        link_tag = offer.find('a', class_='css-z3gu2d')
-        link = link_tag['href'] if link_tag else None
-
-        #ignore link to otodom
-        if 'otodom' in link:
-            continue
-
-        # Extract the price
-        price_tag = offer.find('p', class_='css-13afqrm')
-        price = price_tag.text.strip().replace(u'\xa0', ' ') if price_tag else None
-
-        # Extract the location and date
-        location_date_tag = offer.find('p', class_='css-1mwdrlh')
-        location_date = location_date_tag.text.strip() if location_date_tag else None
-        location, updated_date = location_date.split(' - ') if location_date and ' - ' in location_date else (location_date, None)
-
-        # Extract the area
-        area_tag = offer.find('span', class_='css-643j0o')
-        area = area_tag.text.strip() if area_tag else None
-
-        listings.append({
-            'title': title,
-            'link': f"https://www.olx.pl{link}" if link else None,
-            'price': price,
-            'location': location,
-            'updated_date': updated_date,
-            'area': area
-        })
+        if data and data.get('link'):
+            listings.append(data)
 
     return listings
-
-
-if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print('Usage: python otodom_scrapper.py <min_price> <max_price>')
-        sys.exit(1)
-
-    min_price = int(sys.argv[1])
-    max_price = int(sys.argv[2])
-
-    
