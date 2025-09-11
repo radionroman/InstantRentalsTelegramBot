@@ -144,8 +144,7 @@ def parse_listing_card(card):
     return {
         'title': title,
         'link': link,
-        'price': price_main,
-        'price_extra': price_extra,
+        'price': price_main + price_extra,
         'location': address,
         'room_count': rooms,
         'area': area,
@@ -167,7 +166,7 @@ def scrape_otodom(filters):
     for card in cards:
         data = parse_listing_card(card)
         # require at least a link to consider it a valid listing
-        if data.get('link'):
+        if data.get('link') and not data.get('promoted'):
             listings.append(data)
 
     return listings

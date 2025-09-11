@@ -167,7 +167,7 @@ def scrape_olx(filters):
     for card in cards:
         data = parse_card(card)
         
-        if data and data.get('link'):
+        if data and data.get('link') and not data.get('featured'):
             listings.append(data)
 
     return listings

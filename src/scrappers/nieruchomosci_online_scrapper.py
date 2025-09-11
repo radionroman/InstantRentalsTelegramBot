@@ -33,7 +33,7 @@ def build_url(filters):
     rooms_max = max(filters['selected_rooms']) if filters.get('selected_rooms') else 4
 
     # format: ... ,,,,{priceMin}-{priceMax},{areaMin}-{areaMax},,,,,,,{roomsMin}-{roomsMax}
-    url = f"{base_url},,,,{price_min}-{price_max},{area_min}-{area_max},,,,,,,{rooms_min}-{rooms_max}"
+    url = f"{base_url},,,,{price_min}-{price_max},{area_min}-{area_max},,,,,,,{rooms_min}-{rooms_max}&o=modDate,desc"
     return url
 
 def _txt(el):
